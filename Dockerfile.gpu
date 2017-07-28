@@ -5,7 +5,8 @@ MAINTAINER Sai Soundararaj <saip@outlook.com>
 ARG THEANO_VERSION=rel-0.8.2
 ARG TENSORFLOW_VERSION=0.12.1
 ARG TENSORFLOW_ARCH=gpu
-ARG KERAS_VERSION=1.2.0
+#ARG KERAS_VERSION=1.2.0
+ARG KERAS_VERSION=2.0.5
 ARG LASAGNE_VERSION=v0.1
 ARG TORCH_VERSION=latest
 ARG CAFFE_VERSION=master
@@ -30,6 +31,7 @@ RUN apt-get update && apt-get install -y \
 		libhdf5-dev \
 		libjpeg-dev \
 		liblcms2-dev \
+		libatlas-base-dev \
 		libopenblas-dev \
 		liblapack-dev \
 		libopenjpeg2 \
@@ -173,19 +175,40 @@ RUN echo "$CAFFE_ROOT/build/lib" >> /etc/ld.so.conf.d/caffe.conf && ldconfig
 
 
 # Install Theano and set up Theano config (.theanorc) for CUDA and OpenBLAS
-RUN pip --no-cache-dir install git+git://github.com/Theano/Theano.git@${THEANO_VERSION} && \
-	\
-	echo "[global]\ndevice=gpu\nfloatX=float32\noptimizer_including=cudnn\nmode=FAST_RUN \
-		\n[lib]\ncnmem=0.95 \
-		\n[nvcc]\nfastmath=True \
-		\n[blas]\nldflag = -L/usr/lib/openblas-base -lopenblas \
-		\n[DebugMode]\ncheck_finite=1" \
-	> /root/.theanorc
+#RUN pip --no-cache-dir install git+git://github.com/Theano/Theano.git@${THEANO_VERSION} && \
+#	\
+#	echo "[global]\ndevice=gpu\nfloatX=float32\noptimizer_including=cudnn\nmode=FAST_RUN \
+#		\n[lib]\ncnmem=0.95 \
+#		\n[nvcc]\nfastmath=True \
+#		\n[blas]\nldflag = -L/usr/lib/openblas-base -lopenblas \
+#		\n[DebugMode]\ncheck_finite=1" \
+#	> /root/.theanorc
 
+RUN pip install --upgrade pip
+RUN pip install --upgrade six
+RUN pip install --upgrade --no-deps git+git://github.com/Theano/Theano.git
 
 # Install Keras
-RUN pip --no-cache-dir install git+git://github.com/fchollet/keras.git@${KERAS_VERSION}
+# RUN pip --no-cache-dir install git+git://github.com/fchollet/keras.git@${KERAS_VERSION}
 
+# Install dependencies for Keras
+RUN apt-get update && apt-get install -y \
+  libhdf5-dev \
+  python-h5py \
+  python-yaml
+
+# Install Keras
+RUN pip --no-cache-dir install git+git://github.com/fchollet/keras.git@${KERAS_VERSION} && \
+        \
+        mkdir /root/.keras && \
+        \
+        echo "{ \
+                \n\t\"epsilon\": 1e-07,\
+                \n\t\"floatx\": \"float32\",\
+                \n\t\"image_data_format\": \"channels_first\",\
+                \n\t\"image_dim_ordering\": \"th\",\
+                \n\t\"backend\": \"theano\"\
+        \n}" > /root/.keras/keras.json
 
 # Install Lasagne
 RUN pip --no-cache-dir install git+git://github.com/Lasagne/Lasagne.git@${LASAGNE_VERSION}
@@ -224,11 +247,14 @@ RUN git clone --depth 1 https://github.com/opencv/opencv.git /root/opencv && \
 	cd /root/opencv && \
 	mkdir build && \
 	cd build && \
-	cmake -DWITH_QT=ON -DWITH_OPENGL=ON -DFORCE_VTK=ON -DWITH_TBB=ON -DWITH_GDAL=ON -DWITH_XINE=ON -DBUILD_EXAMPLES=ON .. && \
+	cmake -DWITH_QT=ON -DWITH_OPENGL=ON -DCMAKE_LIBRARY_PATH=/usr/local/cuda/lib64/stubs/ -DFORCE_VTK=ON -DWITH_TBB=ON -DWITH_GDAL=ON -DWITH_XINE=ON -DBUILD_EXAMPLES=ON -DBUILD_NEW_PYTHON_SUPPORT=ON .. && \
 	make -j"$(nproc)"  && \
 	make install && \
 	ldconfig && \
 	echo 'ln /dev/null /dev/raw1394' >> ~/.bashrc
+
+# enviromnet
+ENV OMP_NUM_THREADS=2
 
 # Set up notebook config
 COPY jupyter_notebook_config.py /root/.jupyter/
